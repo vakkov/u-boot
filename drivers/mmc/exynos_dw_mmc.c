@@ -101,6 +101,7 @@ static void exynos_dwmci_board_init(struct dwmci_host *host)
 
 static int exynos_dwmci_core_init(struct dwmci_host *host)
 {
+	unsigned int addr_config;
 	unsigned int div;
 	unsigned long freq, sclk;
 
@@ -125,6 +126,11 @@ static int exynos_dwmci_core_init(struct dwmci_host *host)
 	host->clksel = exynos_dwmci_clksel;
 	host->get_mmc_clk = exynos_dwmci_get_clk;
 
+	addr_config = DWMCI_GET_ADDR_CONFIG(dwmci_readl(host, DWMCI_HCON));
+	if (addr_config == 1)
+		/* host supports IDMAC in 64-bit address mode */
+		host->dma_64bit_address = 1;
+
 #ifndef CONFIG_DM_MMC
 	/* Add the mmc channel to be registered with mmc core */
 	if (add_dwmci(host, DWMMC_MAX_FREQ, DWMMC_MIN_FREQ)) {
@@ -138,6 +144,7 @@ static int exynos_dwmci_core_init(struct dwmci_host *host)
 
 static int do_dwmci_init(struct dwmci_host *host)
 {
+#ifdef CONFIG_CPU_V7A
 	int flag, err;
 
 	flag = host->buswidth == 8 ? PINMUX_FLAG_8BIT_MODE : PINMUX_FLAG_NONE;
@@ -146,6 +153,7 @@ static int do_dwmci_init(struct dwmci_host *host)
 		printf("DWMMC%d not configure\n", host->dev_index);
 		return err;
 	}
+#endif
 
 	return exynos_dwmci_core_init(host);
 }
@@ -155,10 +163,15 @@ static int exynos_dwmci_get_config(const void *blob, int node,
 				   struct dwmci_exynos_priv_data *priv)
 {
 	int err = 0;
-	u32 base, timing[3];
+	dma_addr_t base;
+	u32 timing[3];
 
+#ifdef CONFIG_CPU_V7A
 	/* Extract device id for each mmc channel */
 	host->dev_id = pinmux_decode_periph_id(blob, node);
+#else
+	host->dev_id = 0;
+#endif
 
 	host->dev_index = fdtdec_get_int(blob, node, "index", host->dev_id);
 	if (host->dev_index == host->dev_id)

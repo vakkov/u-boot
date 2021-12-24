@@ -36,8 +36,8 @@ static int dwmci_wait_reset(struct dwmci_host *host, u32 value)
 	return 0;
 }
 
-static void dwmci_set_idma_desc(struct dwmci_idmac *idmac,
-		u32 desc0, u32 desc1, u32 desc2)
+static void dwmci_set_idma_desc_32bit(void *idmac,
+				      u32 desc0, u32 desc1, u32 desc2)
 {
 	struct dwmci_idmac *desc = idmac;
 
@@ -47,11 +47,27 @@ static void dwmci_set_idma_desc(struct dwmci_idmac *idmac,
 	desc->next_addr = (ulong)desc + sizeof(struct dwmci_idmac);
 }
 
+static void dwmci_set_idma_desc_64bit(void *idmac,
+				      u32 desc0, u32 desc1, u32 desc2)
+{
+	struct dwmci_idmac_64addr *desc = idmac;
+
+	desc->flags = desc0;
+	desc->_res1 = 0;
+	desc->cnt = desc1;
+	desc->_res2 = 0;
+	desc->addrl = desc2;
+	desc->addrh = 0;
+	desc->next_addrl = (ulong)desc + sizeof(struct dwmci_idmac_64addr);
+	desc->next_addrh = 0;
+}
+
 static void dwmci_prepare_data(struct dwmci_host *host,
 			       struct mmc_data *data,
-			       struct dwmci_idmac *cur_idmac,
+			       struct dwmci_idmac_64addr *cur_idmac64,
 			       void *bounce_buffer)
 {
+	struct dwmci_idmac *cur_idmac = (struct dwmci_idmac *)cur_idmac64;
 	unsigned long ctrl;
 	unsigned int i = 0, flags, cnt, blk_cnt;
 	ulong data_start, data_end;
@@ -65,7 +81,12 @@ static void dwmci_prepare_data(struct dwmci_host *host,
 	dwmci_writel(host, DWMCI_IDSTS, 0xFFFFFFFF);
 
 	data_start = (ulong)cur_idmac;
-	dwmci_writel(host, DWMCI_DBADDR, (ulong)cur_idmac);
+
+	if (host->dma_64bit_address) {
+		dwmci_writel(host, DWMCI_DBADDRU, 0);
+		dwmci_writel(host, DWMCI_DBADDRL, (ulong)cur_idmac64);
+	} else
+		dwmci_writel(host, DWMCI_DBADDR, (ulong)cur_idmac);
 
 	do {
 		flags = DWMCI_IDMAC_OWN | DWMCI_IDMAC_CH ;
@@ -76,17 +97,28 @@ static void dwmci_prepare_data(struct dwmci_host *host,
 		} else
 			cnt = data->blocksize * 8;
 
-		dwmci_set_idma_desc(cur_idmac, flags, cnt,
-				    (ulong)bounce_buffer + (i * PAGE_SIZE));
+		if (host->dma_64bit_address)
+			dwmci_set_idma_desc_64bit(cur_idmac64, flags, cnt,
+						 (ulong)bounce_buffer +
+						  (i * PAGE_SIZE));
+		else
+			dwmci_set_idma_desc_32bit(cur_idmac, flags, cnt,
+						  (ulong)bounce_buffer +
+						  (i * PAGE_SIZE));
 
 		cur_idmac++;
+        cur_idmac64++;
 		if (blk_cnt <= 8)
 			break;
 		blk_cnt -= 8;
 		i++;
 	} while(1);
 
-	data_end = (ulong)cur_idmac;
+	//data_end = (ulong)cur_idmac;
+	if (host->dma_64bit_address)
+		data_end = (ulong)cur_idmac64;
+	else
+		data_end = (ulong)cur_idmac;
 	flush_dcache_range(data_start, roundup(data_end, ARCH_DMA_MINALIGN));
 
 	ctrl = dwmci_readl(host, DWMCI_CTRL);
@@ -250,7 +282,7 @@ static int dwmci_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 {
 #endif
 	struct dwmci_host *host = mmc->priv;
-	ALLOC_CACHE_ALIGN_BUFFER(struct dwmci_idmac, cur_idmac,
+	ALLOC_CACHE_ALIGN_BUFFER(struct dwmci_idmac_64addr, cur_idmac64,
 				 data ? DIV_ROUND_UP(data->blocks, 8) : 0);
 	int ret = 0, flags = 0, i;
 	unsigned int timeout = 500;
@@ -290,7 +322,7 @@ static int dwmci_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 			if (ret)
 				return ret;
 
-			dwmci_prepare_data(host, data, cur_idmac,
+			dwmci_prepare_data(host, data, cur_idmac64,
 					   bbstate.bounce_buffer);
 		}
 	}
@@ -544,7 +576,9 @@ static int dwmci_init(struct mmc *mmc)
 
 	dwmci_writel(host, DWMCI_TMOUT, 0xFFFFFFFF);
 
-	dwmci_writel(host, DWMCI_IDINTEN, 0);
+	dwmci_writel(host, host->dma_64bit_address ?
+			   DWMCI_IDINTEN64 : DWMCI_IDINTEN, 0);
+
 	dwmci_writel(host, DWMCI_BMOD, 1);
 
 	if (!host->fifoth_val) {

@@ -96,3 +96,27 @@ static struct mm_region exynos7880_mem_map[] = {
 
 struct mm_region *mem_map = exynos7880_mem_map;
 #endif
+
+#ifdef CONFIG_EXYNOS5433
+static struct mm_region exynos5433_mem_map[] = {
+	{
+		.virt = 0x00000000UL,
+		.phys = 0x00000000UL,
+		.size = 0x20000000UL,
+		.attrs = PTE_BLOCK_MEMTYPE(MT_DEVICE_NGNRNE) |
+			 PTE_BLOCK_NON_SHARE |
+			 PTE_BLOCK_PXN | PTE_BLOCK_UXN
+	}, {
+		.virt = 0x20000000UL,
+		.phys = 0x20000000UL,
+		.size = 0xC0000000UL,
+		.attrs = PTE_BLOCK_MEMTYPE(MT_NORMAL) |
+			 PTE_BLOCK_INNER_SHARE
+	}, {
+		/* List terminator */
+		0,
+	}
+};
+
+struct mm_region *mem_map = exynos5433_mem_map;
+#endif

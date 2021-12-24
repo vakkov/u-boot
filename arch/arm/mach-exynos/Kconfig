@@ -34,6 +34,13 @@ config ARCH_EXYNOS5
 	  Cortex-A7 CPU in big.LITTLE configuration). There are multiple SoCs
 	  in this family including Exynos5250, Exynos5420 and Exynos5800.
 
+config ARCH_EXYNOS5433
+	bool "Exynos5433 SoC family"
+	select ARM64
+	help
+	  Samsung Exynos5433 SoC family are based on ARM Cortex-A57 CPU and
+	  Cortex-A53 CPU (in a big.LITTLE configuration).
+
 config ARCH_EXYNOS7
 	bool "Exynos7 SoC family"
 	select ARM64
@@ -136,6 +143,19 @@ config TARGET_PEACH_PIT
 endchoice
 endif
 
+if ARCH_EXYNOS5433
+
+choice
+	prompt "EXYNOS5433 board select"
+
+config  TARGET_TM2
+	bool "TM2 board"
+	select ARM64
+	select OF_CONTROL
+
+endchoice
+endif
+
 if ARCH_EXYNOS7
 
 choice
@@ -193,6 +213,7 @@ source "board/samsung/odroid/Kconfig"
 source "board/samsung/arndale/Kconfig"
 source "board/samsung/smdk5250/Kconfig"
 source "board/samsung/smdk5420/Kconfig"
+source "board/samsung/tm2/Kconfig"
 source "board/samsung/espresso7420/Kconfig"
 source "board/samsung/axy17lte/Kconfig"
 

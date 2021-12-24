@@ -50,6 +50,17 @@
 #define DWMCI_DSCADDR		0x094
 #define DWMCI_BUFADDR		0x098
 #define DWMCI_DATA		0x200
+/*
+ * Registers to support idmac 64-bit address mode
+ */
+#define DWMCI_DBADDRL		0x088
+#define DWMCI_DBADDRU		0x08c
+#define DWMCI_IDSTS64		0x090
+#define DWMCI_IDINTEN64		0x094
+#define DWMCI_DSCADDRL		0x098
+#define DWMCI_DSCADDRU		0x09c
+#define DWMCI_BUFADDRL		0x0A0
+#define DWMCI_BUFADDRU		0x0A4
 
 /* Interrupt Mask register */
 #define DWMCI_INTMSK_ALL	0xffffffff
@@ -142,6 +153,7 @@
 /* quirks */
 #define DWMCI_QUIRK_DISABLE_SMU		(1 << 0)
 
+#define DWMCI_GET_ADDR_CONFIG(x) (((x)>>27) & 0x1)
 /**
  * struct dwmci_host - Information about a designware MMC host
  *
@@ -155,6 +167,7 @@
  * @dev_id:	Arbitrary device ID for use by controller
  * @buswidth:	Bus width in bits (8 or 4)
  * @fifoth_val:	Value for FIFOTH register (or 0 to leave unset)
+ * @dma_64bit_address:	True only for devices supporting 64 bit DMA
  * @mmc:	Pointer to generic MMC structure for this device
  * @priv:	Private pointer for use by controller
  */
@@ -171,6 +184,7 @@ struct dwmci_host {
 	int dev_id;
 	int buswidth;
 	u32 fifoth_val;
+	int dma_64bit_address;
 	struct mmc *mmc;
 	void *priv;
 
@@ -204,6 +218,17 @@ struct dwmci_idmac {
 	u32 cnt;
 	u32 addr;
 	u32 next_addr;
+} __aligned(ARCH_DMA_MINALIGN);
+
+struct dwmci_idmac_64addr {
+	u32 flags;
+	u32 _res1;
+	u32 cnt;
+	u32 _res2;
+	u32 addrl;
+	u32 addrh;
+	u32 next_addrl;
+	u32 next_addrh;
 } __aligned(ARCH_DMA_MINALIGN);
 
 static inline void dwmci_writel(struct dwmci_host *host, int reg, u32 val)
